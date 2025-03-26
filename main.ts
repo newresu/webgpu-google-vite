@@ -36,7 +36,7 @@ const cPass = encoder.beginRenderPass({
       view: context.getCurrentTexture().createView(),
       loadOp: "clear",
       storeOp: "store",
-      clearValue: [0.1, 0, 0.7, 0.1],
+      clearValue: [0.1, 0, 0.7, 0.1], // alpha doesn't work
     },
   ],
 });
