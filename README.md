@@ -2,6 +2,6 @@
 
 You can use Live Server, but to get good type-hints I set it up with vite.
 
-Run `npm run dev` to start.
+Run `npm i && npm run dev` to start.
 
 You may need the [WebGPU Troubleshooting Guide](https://developer.chrome.com/docs/web-platform/webgpu/troubleshooting-tips) to set up the browser.
