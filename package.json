@@ -1,0 +1,19 @@
+{
+  "name": "webgpu_tutorial",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev":"vite dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "typescript": "^5.8.2",
+    "vite": "^6.2.3"
+  },
+  "devDependencies": {
+    "@webgpu/types": "^0.1.59"
+  }
+}
