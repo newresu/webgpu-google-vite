@@ -1,42 +1,21 @@
+import { twoTrianglesCoords } from "./triangleCoords.ts";
+import { getDevice, getCanvasGPUContext } from "./utils.ts";
+
+const GRID_SIZE = 4;
+
+/* Get canvas and device */
 const canvas = document.querySelector("canvas");
+const device = await getDevice(navigator);
 
-if (!canvas) {
-  throw new Error("`canvas` is `undefined`.");
-}
-
-if (!navigator.gpu) {
-  throw new Error("WebGPU not supported on this browser.");
-}
-
-const adapter = await navigator.gpu.requestAdapter();
-if (!adapter) {
-  throw new Error("No appropriate GPUAdapter found.");
-}
-
-const device = await adapter.requestDevice();
-
-/* Configure the Canvas */
-const context = canvas.getContext("webgpu"); // where the drawing is rendered.
+/* Configure the Canvas Context */
 const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
-if (!context) {
-  throw new Error("`context` is `null`");
-}
+const context = getCanvasGPUContext(canvas);
 context.configure({
   device,
   format: canvasFormat,
 });
 
-/* Put data in Device */
-const twoTrianglesCoords = [
-  [0.8, -0.8],
-  [-0.8, -0.8],
-  [0.8, 0.8],
-
-  [-0.8, 0.8],
-  [-0.8, -0.8],
-  [0.8, 0.8],
-];
-
+/* Vertices: Allocate Space and Write in */
 const vertices = new Float32Array(twoTrianglesCoords.flat());
 const vertexBuffer = device.createBuffer({
   label: "Cell Vertices",
@@ -46,7 +25,16 @@ const vertexBuffer = device.createBuffer({
 
 device.queue.writeBuffer(vertexBuffer, /*bufferOffset=*/ 0, vertices);
 
-// records commands to be issued to GPU
+/* Uniform: Same. */
+const uniformArray = new Float32Array([GRID_SIZE, GRID_SIZE]);
+const uniformBuffer = device.createBuffer({
+  label: "Grid Uniforms",
+  size: uniformArray.byteLength,
+  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+});
+device.queue.writeBuffer(uniformBuffer, /*offset*/ 0, uniformArray);
+
+/* Start the commands */
 const encoder = device.createCommandEncoder();
 
 const renderPass = encoder.beginRenderPass({
@@ -73,20 +61,20 @@ const vertexBufferLayout: GPUVertexBufferLayout = {
     },
   ],
 };
+
+/* Shaders */
 const vertexShaderModule = device.createShaderModule({
   label: "Vertex Shader",
   code: /* wgsl */ `
+    @group(0) @binding(0) var<uniform> grid: vec2f;
     @vertex 
     fn vertexMain(@location(0) pos: vec2f)->@builtin(position) vec4f {
-      /* - runs for each vertex
-         - location(0) is the shader location
-         - return the coord in clip space 
-      */
-      if pos.y > 0 {
-        return vec4f(pos.x + 0.1, pos.y/2,0,1); 
-      } else {
-        return vec4f(pos.x - 0.1, pos.y/2,0,1);
-      }
+      /* 
+       Runs for each vertex
+       location(0) is the shader location
+       return coord in clip space 
+       */
+      return vec4f(pos/grid,0,1);
     }
     `,
 });
@@ -96,7 +84,7 @@ const fragmentShaderModule = device.createShaderModule({
     @fragment
     fn fragmentMain() -> @location(0) vec4f {
       /* 
-       invoked for every pixel
+       Invoked for every pixel
        location(0) is the colorAttachment position.
        returns the same color for each pixel.
        */
@@ -111,7 +99,7 @@ const cellPipeline = device.createRenderPipeline({
   vertex: {
     module: vertexShaderModule,
     entryPoint: "vertexMain",
-    buffers: [vertexBufferLayout],
+    buffers: [vertexBufferLayout], // device doesn't know layout yet.
   },
   fragment: {
     module: fragmentShaderModule,
@@ -124,9 +112,24 @@ const cellPipeline = device.createRenderPipeline({
   },
 });
 
+const bindGroup = device.createBindGroup({
+  label: "Cell renderer bind group",
+  layout: cellPipeline.getBindGroupLayout(0), // @group
+  entries: [
+    {
+      binding: 0, //@binding
+      resource: { buffer: uniformBuffer },
+    },
+  ],
+});
+
 renderPass.setPipeline(cellPipeline);
-// `0` below matches the vertex.buffer
+
+// `0` as in VertexBufferLayout.offset
 renderPass.setVertexBuffer(0, vertexBuffer);
+
+renderPass.setBindGroup(0, bindGroup); // New
+
 renderPass.draw(vertices.length / 2); // 6 vertices
 
 renderPass.end();
