@@ -19,7 +19,7 @@ if (!adapter) {
 const device = await adapter.requestDevice();
 
 // link device and memory with canvas
-if (!(canvas instanceof HTMLCanvasElement)) {
+if (!canvas) {
   throw new Error("`canvas` is not a canvas.");
 }
 const context = canvas.getContext("webgpu");
