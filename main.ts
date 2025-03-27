@@ -42,14 +42,3 @@ const cPass = encoder.beginRenderPass({
 });
 cPass.end();
 device.queue.submit([encoder.finish()]);
-
-// const info = document.getElementById("info");
-// function createAppendElement(
-//   newElementTag: string,
-//   appendTo: HTMLElement,
-//   msg: string
-// ) {
-//   const newElement = document.createElement(newElementTag);
-//   appendTo.appendChild(newElement);
-//   newElement.innerText = msg;
-// }
