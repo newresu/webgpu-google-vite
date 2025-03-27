@@ -1,78 +1,55 @@
 const canvas = document.querySelector("canvas");
-const body = document.querySelector("body");
-if (body) {
-  body.style.backgroundColor = "black";
+
+if (!canvas) {
+  throw new Error("`canvas` is `undefined`.");
 }
 
-// browser support
 if (!navigator.gpu) {
   throw new Error("WebGPU not supported on this browser.");
 }
 
-// hardware support
 const adapter = await navigator.gpu.requestAdapter();
 if (!adapter) {
   throw new Error("No appropriate GPUAdapter found.");
 }
 
-// get a gpu
 const device = await adapter.requestDevice();
 
-// link device and memory with canvas
-if (!canvas) {
-  throw new Error("`canvas` is not a canvas.");
-}
-const context = canvas.getContext("webgpu");
-const texture = navigator.gpu.getPreferredCanvasFormat();
+/* Configure the Canvas */
+const context = canvas.getContext("webgpu"); // where the drawing is rendered.
+const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
 if (!context) {
-  throw new Error("Context undefined.");
+  throw new Error("`context` is `null`");
 }
 context.configure({
-  device: device,
-  format: texture,
+  device,
+  format: canvasFormat,
 });
-// repeats data, Index Buffers is more advanced
-const xyArray = [
-  [0.8, -0.8], // right, bottom
-  // these repeat
-  [-0.8, -0.8], // left, bottom
-  [0.8, 0.8], // right, top
 
-  [-0.8, 0.8], // left, top
-  // repetition
+/* Put data in Device */
+const twoTrianglesCoords = [
+  [0.8, -0.8],
+  [-0.8, -0.8],
+  [0.8, 0.8],
+
+  [-0.8, 0.8],
   [-0.8, -0.8],
   [0.8, 0.8],
 ];
-const vertices = new Float32Array(xyArray.flat());
 
-// allocate the GPU space
+const vertices = new Float32Array(twoTrianglesCoords.flat());
 const vertexBuffer = device.createBuffer({
   label: "Cell Vertices",
   size: vertices.byteLength, // 12 * 32 / 8 = 48
   usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
 });
 
-// copy the vertices to the memory
 device.queue.writeBuffer(vertexBuffer, /*bufferOffset=*/ 0, vertices);
 
-// we need to describe the organization / layout of the _bytes_.
-const vertexBufferLayout: GPUVertexBufferLayout = {
-  // i.e 8 bytes per read
-  arrayStride: Float32Array.BYTES_PER_ELEMENT * 2,
-  attributes: [
-    {
-      // the kind of byte and number; GPUVertexFormat type
-      format: "float32x2",
-      offset: 0,
-      shaderLocation: 0, // Position, see vertex shader
-    },
-  ],
-};
-
-// records GPU commands.
+// records commands to be issued to GPU
 const encoder = device.createCommandEncoder();
 
-const cPass = encoder.beginRenderPass({
+const renderPass = encoder.beginRenderPass({
   colorAttachments: [
     {
       // first attachment, receives the pixel output
@@ -84,6 +61,18 @@ const cPass = encoder.beginRenderPass({
   ],
 });
 
+const vertexBufferLayout: GPUVertexBufferLayout = {
+  // i.e 8 bytes per read
+  arrayStride: Float32Array.BYTES_PER_ELEMENT * 2,
+  attributes: [
+    {
+      // the kind of byte and number
+      format: "float32x2",
+      offset: 0,
+      shaderLocation: 0, // Position (in vertex shader below)
+    },
+  ],
+};
 const vertexShaderModule = device.createShaderModule({
   label: "Vertex Shader",
   code: /* wgsl */ `
@@ -93,7 +82,11 @@ const vertexShaderModule = device.createShaderModule({
          - location(0) is the shader location
          - return the coord in clip space 
       */
-      return vec4f(pos,0,1); 
+      if pos.y > 0 {
+        return vec4f(pos.x + 0.1, pos.y/2,0,1); 
+      } else {
+        return vec4f(pos.x - 0.1, pos.y/2,0,1);
+      }
     }
     `,
 });
@@ -112,7 +105,6 @@ const fragmentShaderModule = device.createShaderModule({
   `,
 });
 
-// Run the shader
 const cellPipeline = device.createRenderPipeline({
   label: "Cell Pipeline",
   layout: "auto",
@@ -126,16 +118,16 @@ const cellPipeline = device.createRenderPipeline({
     entryPoint: "fragmentMain",
     targets: [
       {
-        format: texture,
+        format: canvasFormat,
       },
     ],
   },
 });
 
-cPass.setPipeline(cellPipeline);
+renderPass.setPipeline(cellPipeline);
 // `0` below matches the vertex.buffer
-cPass.setVertexBuffer(0, vertexBuffer);
-cPass.draw(vertices.length / 2); // 6 vertices
+renderPass.setVertexBuffer(0, vertexBuffer);
+renderPass.draw(vertices.length / 2); // 6 vertices
 
-cPass.end();
+renderPass.end();
 device.queue.submit([encoder.finish()]);
