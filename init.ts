@@ -14,8 +14,8 @@ function checkNavigatorGPUSupport(navigator: Navigator) {
   }
 }
 export async function getDevice(navigator: Navigator) {
-  const adapter = await navigator.gpu.requestAdapter();
   checkNavigatorGPUSupport(navigator);
+  const adapter = await navigator.gpu.requestAdapter();
   if (!adapter) {
     throw new Error("No appropriate GPUAdapter found.");
   }

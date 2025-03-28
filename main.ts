@@ -1,8 +1,14 @@
 import { twoTrianglesCoords } from "./triangleCoords.ts";
 import { getDevice, getCanvasGPUContext } from "./init.ts";
-import { getUniformBuffer, getVertexBuffer } from "./getBuffers.ts";
+import {
+  getCellStateBuffer,
+  getUniformBuffer,
+  getVertexBuffer,
+} from "./getBuffers.ts";
 
-const GRID_SIZE = 32;
+const GRID_SIZE = 41;
+const UPDATE_INTERVAL = 200; // ms
+let step = 0;
 
 /* Get canvas and device */
 const canvas = document.querySelector("canvas");
@@ -17,7 +23,7 @@ context.configure({
 });
 
 /* Vertices: Allocate Space and Write in */
-const vertices = new Float32Array(twoTrianglesCoords.flat());
+const vertices = new Float32Array(twoTrianglesCoords);
 const vertexBuffer = getVertexBuffer(device, vertices);
 device.queue.writeBuffer(vertexBuffer, /*bufferOffset=*/ 0, vertices);
 
@@ -26,27 +32,27 @@ const uniformArray = new Float32Array([GRID_SIZE, GRID_SIZE]);
 const uniformBuffer = getUniformBuffer(device, uniformArray);
 device.queue.writeBuffer(uniformBuffer, /*offset*/ 0, uniformArray);
 
-/* Start the commands */
-const encoder = device.createCommandEncoder();
-
-const renderPass = encoder.beginRenderPass({
-  colorAttachments: [
-    {
-      // first attachment, receives the pixel output
-      view: context.getCurrentTexture().createView(),
-      loadOp: "clear",
-      storeOp: "store",
-      clearValue: [0.1, 0.9, 0, 0.5],
-    },
-  ],
-});
+/* Uniform: Same. */
+const cellStateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
+const cellStateBuffer = [
+  getCellStateBuffer(device, cellStateArray, "Cell State A"),
+  getCellStateBuffer(device, cellStateArray, "Cell State B"),
+];
+for (let i = 0; i < cellStateArray.length; i += 3) {
+  cellStateArray[i] = 1;
+}
+device.queue.writeBuffer(cellStateBuffer[0], /*offset*/ 0, cellStateArray);
+for (let i = 0; i < cellStateArray.length; i++) {
+  cellStateArray[i] = i % 2;
+}
+device.queue.writeBuffer(cellStateBuffer[1], /*offset*/ 0, cellStateArray);
 
 const vertexBufferLayout: GPUVertexBufferLayout = {
-  // i.e 8 bytes per read
+  // 8 bytes
   arrayStride: Float32Array.BYTES_PER_ELEMENT * 2,
   attributes: [
     {
-      // the kind of byte and number
+      // kind x number
       format: "float32x2",
       offset: 0,
       shaderLocation: 0, // Position (in vertex shader below)
@@ -57,48 +63,11 @@ const vertexBufferLayout: GPUVertexBufferLayout = {
 /* Shaders */
 const vertexShaderModule = device.createShaderModule({
   label: "Vertex Shader",
-  code: /* wgsl */ `
-    struct VertexInput {
-        @location(0) pos: vec2f, 
-        @builtin(instance_index) instance: u32
-    }
-    struct VertexOutput {
-      @builtin(position) pos: vec4f,
-      @location(0) cell: vec2f, 
-    }
-    @group(0) @binding(0) var<uniform> grid: vec2f;
-    @vertex 
-    fn vertexMain(input:VertexInput)-> VertexOutput{
-      /* 
-       Runs for each vertex
-       location(0) is the shader location
-       return coord in clip space 
-       */
-      let i = f32(input.instance);
-      let cell = vec2f(i % grid.x, floor(i / grid.x));
-      let cellOffset = cell / grid * 2; // Compute the offset to cell
-      let shifted = (input.pos + 1) / grid - 1 + cellOffset; // Add it here!
-      var output: VertexOutput;
-      output.pos = vec4f(shifted, 0, 1);
-      output.cell = cell/grid;
-      return output;
-    }
-    `,
+  code: await fetch("./vertex.wgsl").then((f) => f.text()),
 });
 const fragmentShaderModule = device.createShaderModule({
   label: "Fragment Shader",
-  code: /*wgsl*/ `
-    @fragment
-    fn fragmentMain(@location(0) cell:vec2f) -> @location(0) vec4f {
-      /* 
-       Invoked for every pixel
-       location(0) is the colorAttachment position.
-       returns the same color for each pixel.
-       */
-      let c = cell;
-      return vec4f(c, 1-c.x, 1); // (Red, Green, Blue, Alpha)
-    }
-  `,
+  code: await fetch("./fragment.wgsl").then((f) => f.text()),
 });
 
 const cellPipeline = device.createRenderPipeline({
@@ -120,25 +89,64 @@ const cellPipeline = device.createRenderPipeline({
   },
 });
 
-const bindGroup = device.createBindGroup({
-  label: "Cell renderer bind group",
-  layout: cellPipeline.getBindGroupLayout(0), // @group
-  entries: [
-    {
-      binding: 0, //@binding
-      resource: { buffer: uniformBuffer },
-    },
-  ],
-});
+const bindGroups = [
+  device.createBindGroup({
+    label: "Cell renderer bind group A",
+    layout: cellPipeline.getBindGroupLayout(0), // @group
+    entries: [
+      {
+        binding: 0, //@binding
+        resource: { buffer: uniformBuffer },
+      },
+      {
+        binding: 1, //@binding
+        resource: { buffer: cellStateBuffer[0] },
+      },
+    ],
+  }),
+  device.createBindGroup({
+    label: "Cell renderer bind group B",
+    layout: cellPipeline.getBindGroupLayout(0), // @group
+    entries: [
+      {
+        binding: 0, //@binding
+        resource: { buffer: uniformBuffer },
+      },
+      {
+        binding: 1, //@binding
+        resource: { buffer: cellStateBuffer[1] },
+      },
+    ],
+  }),
+];
 
-renderPass.setPipeline(cellPipeline);
+/* Start the commands */
+function updateGrid() {
+  step++;
+  const encoder = device.createCommandEncoder();
 
-// `0` as in VertexBufferLayout.offset
-renderPass.setVertexBuffer(0, vertexBuffer);
+  const renderPass = encoder.beginRenderPass({
+    colorAttachments: [
+      {
+        // first attachment, receives the pixel output
+        view: context.getCurrentTexture().createView(),
+        loadOp: "clear",
+        storeOp: "store",
+        clearValue: [0.1, 0.9, 0, 0.5],
+      },
+    ],
+  });
+  renderPass.setPipeline(cellPipeline);
 
-renderPass.setBindGroup(0, bindGroup); // New
+  // `0` as in VertexBufferLayout.offset
+  renderPass.setVertexBuffer(0, vertexBuffer);
 
-renderPass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE); // 6 vertices
+  renderPass.setBindGroup(0, bindGroups[step % 2]);
 
-renderPass.end();
-device.queue.submit([encoder.finish()]);
+  renderPass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE); // 6 vertices
+
+  renderPass.end();
+  device.queue.submit([encoder.finish()]);
+}
+
+setInterval(updateGrid, UPDATE_INTERVAL);

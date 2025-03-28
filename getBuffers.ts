@@ -13,3 +13,13 @@ export function getVertexBuffer(device: GPUDevice, array: Float32Array) {
     usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
   });
 }
+
+export function getCellStateBuffer(device: GPUDevice, array: Uint32Array,name:string) {
+  return device.createBuffer({
+    label: name,
+    size: array.byteLength,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+  });
+}
+
+
