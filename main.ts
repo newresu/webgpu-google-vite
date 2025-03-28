@@ -6,15 +6,15 @@ import {
   getVertexBuffer,
 } from "./getBuffers.ts";
 
-const GRID_SIZE = 41;
-const UPDATE_INTERVAL = 200; // ms
+const GRID_SIZE = 12;
+const UPDATE_INTERVAL = 1000; // ms
 let step = 0;
 
-/* Get canvas and device */
+/* Get canvas and device (if available otherwise throws.) */
 const canvas = document.querySelector("canvas");
 const device = await getDevice(navigator);
 
-/* Configure the Canvas Context */
+/* Get the canvas WebGPU-context and configure it */
 const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
 const context = getCanvasGPUContext(canvas); //ctx.getContext('webgpu')
 context.configure({
@@ -25,12 +25,12 @@ context.configure({
 /* Vertices: Allocate Space and Write in */
 const vertices = new Float32Array(twoTrianglesCoords);
 const vertexBuffer = getVertexBuffer(device, vertices);
-device.queue.writeBuffer(vertexBuffer, /*bufferOffset=*/ 0, vertices);
+device.queue.writeBuffer(vertexBuffer, 0, vertices);
 
 /* Uniform: Same. */
 const uniformArray = new Float32Array([GRID_SIZE, GRID_SIZE]);
 const uniformBuffer = getUniformBuffer(device, uniformArray);
-device.queue.writeBuffer(uniformBuffer, /*offset*/ 0, uniformArray);
+device.queue.writeBuffer(uniformBuffer, 0, uniformArray);
 
 /* Uniform: Same. */
 const cellStateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
@@ -41,14 +41,15 @@ const cellStateBuffer = [
 for (let i = 0; i < cellStateArray.length; i += 3) {
   cellStateArray[i] = 1;
 }
-device.queue.writeBuffer(cellStateBuffer[0], /*offset*/ 0, cellStateArray);
+device.queue.writeBuffer(cellStateBuffer[0], 0, cellStateArray);
 for (let i = 0; i < cellStateArray.length; i++) {
   cellStateArray[i] = i % 2;
 }
-device.queue.writeBuffer(cellStateBuffer[1], /*offset*/ 0, cellStateArray);
+device.queue.writeBuffer(cellStateBuffer[1], 0, cellStateArray);
 
+/** Define the layout of data in the buffer */
 const vertexBufferLayout: GPUVertexBufferLayout = {
-  // 8 bytes
+  // (x, y) = (f32, f32) = 8 bytes per read
   arrayStride: Float32Array.BYTES_PER_ELEMENT * 2,
   attributes: [
     {
