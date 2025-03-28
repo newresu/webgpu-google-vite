@@ -1,4 +1,3 @@
-
 export function getCanvasGPUContext(canvas: HTMLCanvasElement | null) {
   if (!canvas) {
     throw new Error("`canvas` is `null`");
