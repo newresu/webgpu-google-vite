@@ -1,7 +1,7 @@
 import { twoTrianglesCoords } from "./triangleCoords.ts";
 import { getDevice, getCanvasGPUContext } from "./utils.ts";
 
-const GRID_SIZE = 4;
+const GRID_SIZE = 41;
 
 /* Get canvas and device */
 const canvas = document.querySelector("canvas");
@@ -68,13 +68,17 @@ const vertexShaderModule = device.createShaderModule({
   code: /* wgsl */ `
     @group(0) @binding(0) var<uniform> grid: vec2f;
     @vertex 
-    fn vertexMain(@location(0) pos: vec2f)->@builtin(position) vec4f {
+    fn vertexMain(@location(0) pos: vec2f, @builtin(instance_index) instance: u32)->@builtin(position) vec4f {
       /* 
        Runs for each vertex
        location(0) is the shader location
        return coord in clip space 
        */
-      return vec4f(pos/grid,0,1);
+      let i = f32(instance);
+      let cell = vec2f(i % grid.x, floor(i / grid.x));
+      let cellOffset = cell / grid * 2; // Compute the offset to cell
+      let shifted = (pos + 1) / grid - 1 + cellOffset; // Add it here!
+      return vec4f(shifted,0,1);
     }
     `,
 });
@@ -130,7 +134,7 @@ renderPass.setVertexBuffer(0, vertexBuffer);
 
 renderPass.setBindGroup(0, bindGroup); // New
 
-renderPass.draw(vertices.length / 2); // 6 vertices
+renderPass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE); // 6 vertices
 
 renderPass.end();
 device.queue.submit([encoder.finish()]);
