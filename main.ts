@@ -1,7 +1,7 @@
 import { twoTrianglesCoords } from "./triangleCoords.ts";
 import { getDevice, getCanvasGPUContext } from "./utils.ts";
 
-const GRID_SIZE = 41;
+const GRID_SIZE = 16;
 
 /* Get canvas and device */
 const canvas = document.querySelector("canvas");
@@ -70,15 +70,18 @@ const vertexShaderModule = device.createShaderModule({
     @vertex 
     fn vertexMain(@location(0) pos: vec2f, @builtin(instance_index) instance: u32)->@builtin(position) vec4f {
       /* 
-       Runs for each vertex
+       Runs for each vertex (6 times in total)
        location(0) is the shader location
        return coord in clip space 
        */
       let i = f32(instance);
       let cell = vec2f(i % grid.x, floor(i / grid.x));
-      let cellOffset = cell / grid * 2; // Compute the offset to cell
-      let shifted = (pos + 1) / grid - 1 + cellOffset; // Add it here!
-      return vec4f(shifted,0,1);
+      let length_c = 2 / grid;
+      let displacement = cell * length_c ; // Compute the offset to cell
+      let lowerLeft =  (pos + 0.8) / grid - 1; // (0,0)
+      let offset = 0.2/grid; // 0.4/(2*grid)
+      let gridPos = lowerLeft + displacement + offset;
+      return vec4f(gridPos,0,1);
     }
     `,
 });
