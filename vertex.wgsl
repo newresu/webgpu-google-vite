@@ -23,15 +23,23 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
   */
 
   let i = f32(input.instance);
-  // input.instance acts as ID.
   let on_off_light = f32(cellState[input.instance]);
-  // models a cell movement
+
   let cell = vec2f(i % grid.x, floor(i / grid.x));
-  let cellOffset = cell / grid * 2;
-  // Compute the offset to cell
-  let gridPos = (input.pos * on_off_light + 1) / grid - 1 + cellOffset;
+
+  let length_c = 2 / grid;
+  // length per cell
+  let displacement = cell * length_c;
+
+  let lowerLeft = (input.pos * on_off_light + 0.8) / grid - 1;
+  let offset = 0.4 / (2 * grid);
+  // offset for a cell
+
+  let gridPos = lowerLeft + displacement + offset;
+
   var output: VertexOutput;
   output.pos = vec4f(gridPos, 0, 1);
   output.cell = cell / grid;
+
   return output;
 }

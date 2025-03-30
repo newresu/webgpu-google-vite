@@ -1,3 +1,5 @@
+import vertexShader from "./vertex.wgsl?raw";
+import fragmentShader from "./fragment.wgsl?raw";
 import { twoTrianglesCoords } from "./triangleCoords.ts";
 import { getDevice, getCanvasGPUContext } from "./init.ts";
 import {
@@ -6,7 +8,7 @@ import {
   getVertexBuffer,
 } from "./getBuffers.ts";
 
-const GRID_SIZE = 12;
+const GRID_SIZE = 8;
 const UPDATE_INTERVAL = 1000; // ms
 let step = 0;
 
@@ -64,11 +66,11 @@ const vertexBufferLayout: GPUVertexBufferLayout = {
 /* Shaders */
 const vertexShaderModule = device.createShaderModule({
   label: "Vertex Shader",
-  code: await fetch("./vertex.wgsl").then((f) => f.text()),
+  code: vertexShader,
 });
 const fragmentShaderModule = device.createShaderModule({
   label: "Fragment Shader",
-  code: await fetch("./fragment.wgsl").then((f) => f.text()),
+  code: fragmentShader,
 });
 
 const cellPipeline = device.createRenderPipeline({
