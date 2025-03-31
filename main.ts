@@ -15,88 +15,91 @@ if (!adapter) {
   throw new Error("The GPU isn't being detected, or it is not supported.");
 }
 const device = await adapter.requestDevice();
-const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
-context.configure({
-  device,
-  format: canvasFormat,
+
+const module = device.createShaderModule({
+  label: "doubling compute module",
+  code: /* wgsl */ `
+      @group(0) @binding(0) var<storage, read_write> data: array<f32>;
+ 
+      @compute @workgroup_size(1) fn computeSomething(
+        @builtin(global_invocation_id) id: vec3u
+      ) {
+        let i = id.x;
+        data[i] = data[i] * 2.0 + 5;
+      }
+    `,
 });
 
-/* Data to Buffer */
-const triangle = new Float32Array([-0.2, -0.2, 0, 0.2, 0.2, -0.2]);
-const vertexBuffer = device.createBuffer({
-  size: triangle.byteLength,
-  usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-  label: "Vertex Buffer",
-});
-device.queue.writeBuffer(vertexBuffer, /*offset*/ 0, triangle);
+const input = new Float32Array(5e2).map((x, i) => i);
+const input2 = new Float32Array(5e2).map((x, i) => i);
+const s = performance.now();
+for (let i = 0; i < input.length; i++) {
+  input2[i] = input2[i] * 2 + 5;
+}
+const e = performance.now();
+console.log((e - s) / 1000);
 
-const vertexShader = device.createShaderModule({
-  code: /*wgsl*/ `
-  @vertex
-  fn main(@location(0) coord: vec2f)->@builtin(position) vec4f{
-     return vec4f(coord*5,0,1);
-    }
-  `,
-  label: "Vertex Shader",
+const workBuffer = device.createBuffer({
+  size: input.byteLength,
+  usage:
+    GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+  label: "Work Buffer",
 });
-const fragmentShader = device.createShaderModule({
-  code: /*wgsl*/ `
-  @fragment
-  fn main() -> @location(0) vec4f{
-    // loc(0) is attachment 0
-    return vec4f(1,0,0,1);
-  }
-`,
-  label: "Fragment Shader",
+device.queue.writeBuffer(workBuffer, 0, input);
+const resultBuffer = device.createBuffer({
+  size: input.byteLength,
+  usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
 });
 
-const vertexBufferLayout: GPUVertexBufferLayout = {
-  arrayStride: Float32Array.BYTES_PER_ELEMENT * 2,
-  attributes: [
+const pipeline = device.createComputePipeline({
+  label: "doubling compute pipeline",
+  layout: "auto",
+  compute: {
+    module,
+    entryPoint: "computeSomething",
+  },
+});
+
+const binding = device.createBindGroup({
+  entries: [
     {
-      format: "float32x2",
-      offset: 0 /*offset*/,
-      shaderLocation: 0 /*shader location*/,
+      binding: 0, // binding 0 in shader
+      resource: { buffer: workBuffer },
     },
   ],
-};
-const pipeline = device.createRenderPipeline({
-  layout: "auto",
-  vertex: {
-    module: vertexShader,
-    buffers: [vertexBufferLayout],
-    entryPoint: "main",
-  },
-  fragment: {
-    entryPoint: "main",
-    module: fragmentShader,
-    targets: [{ format: canvasFormat }],
-  },
+  layout: pipeline.getBindGroupLayout(0), // to group 0 in shader
+  label: "Work Buffer Binding",
 });
-function render() {
-  const commander = device.createCommandEncoder({ label: "cmd encoder" });
 
-  const setUp = commander.beginRenderPass({
-    // config surface
-    label: "Color Attachments",
-    colorAttachments: [
-      {
-        loadOp: "clear",
-        storeOp: "store",
-        view: context.getCurrentTexture().createView(),
-        clearValue: [0.1, 0.5, 0.6, 1],
-      },
-    ],
+async function mulGPU() {
+  const encoder = device.createCommandEncoder({
+    label: "doubling encoder",
+  });
+  const computePass = encoder.beginComputePass({
+    label: "doubling compute pass",
   });
 
-  // configure the rest: data, transformations, draw,..
-  setUp.setVertexBuffer(/* shaderlocation */ 0, vertexBuffer);
-  setUp.setPipeline(pipeline);
-  setUp.draw(triangle.length / 2, 1);
-  setUp.end();
-  device.queue.submit([commander.finish()]);
-}
+  computePass.setPipeline(pipeline);
+  computePass.setBindGroup(0, binding);
+  computePass.dispatchWorkgroups(input.length); // run 3 times
+  computePass.end();
 
-render();
+  encoder.copyBufferToBuffer(workBuffer, 0, resultBuffer, 0, resultBuffer.size);
+  const commandBuffer = encoder.finish();
+  device.queue.submit([commandBuffer]);
+
+  // Read the results
+  await resultBuffer.mapAsync(GPUMapMode.READ);
+  const result = new Float32Array(resultBuffer.getMappedRange());
+
+  // console.log("input", input);
+  // console.log("result", result);
+
+  resultBuffer.unmap();
+}
+const s2 = performance.now();
+mulGPU();
+const e2 = performance.now();
+console.log((e2 - s2) / 1000);
 
 export {};
