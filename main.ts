@@ -43,7 +43,7 @@ const vertexShader = device.createShaderModule({
   code: /*wgsl*/ `
   @vertex
   fn main(@location(0) coord: vec2f)->@builtin(position) vec4f{
-     return vec4f(coord*2,0,1);
+     return vec4f(coord*5,0,1);
     }
   `,
   label: "Vertex Shader",
@@ -60,7 +60,7 @@ const fragmentShader = device.createShaderModule({
 });
 function render() {
   const commander = device.createCommandEncoder({ label: "cmd encoder" });
-  device.createRenderPipeline({
+  const pipeline = device.createRenderPipeline({
     layout: "auto",
     vertex: {
       module: vertexShader,
@@ -80,13 +80,18 @@ function render() {
         loadOp: "clear",
         storeOp: "store",
         view: context.getCurrentTexture().createView(),
+        clearValue: [0.1, 0.5, 0.6, 1],
       },
     ],
   });
 
   descriptor.setVertexBuffer(/* shaderlocation */ 0, vertexBuffer);
+  descriptor.setPipeline(pipeline);
   descriptor.draw(triangle.length / 2, 1);
+  descriptor.end();
   device.queue.submit([commander.finish()]);
 }
+
+render();
 
 export {};
