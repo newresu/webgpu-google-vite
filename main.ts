@@ -1,158 +1,92 @@
-import vertexShader from "./vertex.wgsl?raw";
-import fragmentShader from "./fragment.wgsl?raw";
-import { twoTrianglesCoords } from "./triangleCoords.ts";
-import { getDevice, getCanvasGPUContext } from "./init.ts";
-import {
-  getCellStateBuffer,
-  getUniformBuffer,
-  getVertexBuffer,
-} from "./getBuffers.ts";
-
-const GRID_SIZE = 8;
-const UPDATE_INTERVAL = 1000; // ms
-let step = 0;
-
-/* Get canvas and device (if available otherwise throws.) */
+// Write a triangle from scratch
 const canvas = document.querySelector("canvas");
-const device = await getDevice(navigator);
 
-/* Get the canvas WebGPU-context and configure it */
+if (!canvas) {
+  throw new Error("Could not find a canvas element.");
+}
+const context = canvas.getContext("webgpu");
+
+if (!navigator.gpu) {
+  throw new Error("Browser does not support WebGPU.");
+}
+
+const adapter = await navigator.gpu.requestAdapter();
+if (!adapter) {
+  throw new Error("The GPU isn't being detected, or it is not supported.");
+}
+const device = await adapter.requestDevice();
 const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
-const context = getCanvasGPUContext(canvas); //ctx.getContext('webgpu')
 context.configure({
   device,
   format: canvasFormat,
 });
 
-/** ## Pipeline(ShaderModules, VertexLayout) */
+const triangle = new Float32Array([-0.2, -0.2, 0, 0.2, 0.2, -0.2]);
+const vertexBuffer = device.createBuffer({
+  size: triangle.byteLength,
+  usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+  label: "Vertex Buffer",
+});
+device.queue.writeBuffer(vertexBuffer, /*offset*/ 0, triangle);
 
-/* Declare Vertex-data layout in Buffer. */
 const vertexBufferLayout: GPUVertexBufferLayout = {
-  // (x, y) = (f32, f32) = 8 bytes per read
   arrayStride: Float32Array.BYTES_PER_ELEMENT * 2,
   attributes: [
     {
-      // kind x number
       format: "float32x2",
-      offset: 0,
-      shaderLocation: 0, // Position (in vertex shader below)
+      offset: 0 /*offset*/,
+      shaderLocation: 0 /*shader location*/,
     },
   ],
 };
-
-/* SHADERS */
-const vertexShaderModule = device.createShaderModule({
+const vertexShader = device.createShaderModule({
+  code: /*wgsl*/ `
+  @vertex
+  fn main(@location(0) coord: vec2f)->@builtin(position) vec4f{
+     return vec4f(coord*2,0,1);
+    }
+  `,
   label: "Vertex Shader",
-  code: vertexShader,
 });
-const fragmentShaderModule = device.createShaderModule({
+const fragmentShader = device.createShaderModule({
+  code: /*wgsl*/ `
+  @fragment
+  fn main() -> @location(0) vec4f{
+    // loc(0) is attachment 0
+    return vec4f(1,0,0,1);
+  }
+`,
   label: "Fragment Shader",
-  code: fragmentShader,
 });
-
-const cellPipeline = device.createRenderPipeline({
-  label: "Cell Pipeline",
-  layout: "auto",
-  vertex: {
-    module: vertexShaderModule,
-    entryPoint: "vertexMain",
-    buffers: [vertexBufferLayout], // device doesn't know layout yet.
-  },
-  fragment: {
-    module: fragmentShaderModule,
-    entryPoint: "fragmentMain",
-    targets: [
-      {
-        // for the first texture/attachment
-        format: canvasFormat,
-      },
-    ],
-  },
-});
-
-/** ## Create Buffers and the Binding groups */
-
-const vertices = new Float32Array(twoTrianglesCoords);
-const vertexBuffer = getVertexBuffer(device, vertices);
-device.queue.writeBuffer(vertexBuffer, 0, vertices);
-
-const uniformArray = new Float32Array([GRID_SIZE, GRID_SIZE]);
-const uniformBuffer = getUniformBuffer(device, uniformArray);
-device.queue.writeBuffer(uniformBuffer, 0, uniformArray);
-
-const cellStateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
-const cellStateBuffer = [
-  getCellStateBuffer(device, cellStateArray, "Cell State A"),
-  getCellStateBuffer(device, cellStateArray, "Cell State B"),
-];
-for (let i = 0; i < cellStateArray.length; i += 3) {
-  cellStateArray[i] = 1;
-}
-device.queue.writeBuffer(cellStateBuffer[0], 0, cellStateArray);
-for (let i = 0; i < cellStateArray.length; i++) {
-  cellStateArray[i] = i % 2;
-}
-device.queue.writeBuffer(cellStateBuffer[1], 0, cellStateArray);
-
-const bindGroups = [
-  device.createBindGroup({
-    label: "Cell renderer bind group A",
-    layout: cellPipeline.getBindGroupLayout(0), // @group
-    entries: [
-      {
-        binding: 0, //@binding
-        resource: { buffer: uniformBuffer },
-      },
-      {
-        binding: 1, //@binding
-        resource: { buffer: cellStateBuffer[0] },
-      },
-    ],
-  }),
-  device.createBindGroup({
-    label: "Cell renderer bind group B",
-    layout: cellPipeline.getBindGroupLayout(0), // @group
-    entries: [
-      {
-        binding: 0, //@binding
-        resource: { buffer: uniformBuffer },
-      },
-      {
-        binding: 1, //@binding
-        resource: { buffer: cellStateBuffer[1] },
-      },
-    ],
-  }),
-];
-
-// function uses all globals above.
 function render() {
-  step++;
-  /* ## Start the commands */
-  const encoder = device.createCommandEncoder({ label: "cmd encoder" });
-
-  const renderPass = encoder.beginRenderPass({
+  const commander = device.createCommandEncoder({ label: "cmd encoder" });
+  device.createRenderPipeline({
+    layout: "auto",
+    vertex: {
+      module: vertexShader,
+      buffers: [vertexBufferLayout],
+      entryPoint: "main",
+    },
+    fragment: {
+      entryPoint: "main",
+      module: fragmentShader,
+      targets: [{ format: canvasFormat }],
+    },
+  });
+  const descriptor = commander.beginRenderPass({
+    label: "Color Attachments",
     colorAttachments: [
       {
-        // first attachment, receives the pixel output
-        view: context.getCurrentTexture().createView(),
         loadOp: "clear",
         storeOp: "store",
-        clearValue: [0.1, 0.9, 0, 0.5],
+        view: context.getCurrentTexture().createView(),
       },
     ],
   });
-  renderPass.setPipeline(cellPipeline);
 
-  // `0` as in VertexBufferLayout.offset
-  renderPass.setVertexBuffer(0, vertexBuffer);
-
-  renderPass.setBindGroup(0, bindGroups[step % 2]);
-
-  renderPass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE); // 6 vertices
-
-  renderPass.end();
-  device.queue.submit([encoder.finish()]);
+  descriptor.setVertexBuffer(/* shaderlocation */ 0, vertexBuffer);
+  descriptor.draw(triangle.length / 2, 1);
+  device.queue.submit([commander.finish()]);
 }
 
-setInterval(render, UPDATE_INTERVAL);
+export {};
