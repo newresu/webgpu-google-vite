@@ -1,4 +1,4 @@
-// Write a triangle from scratch
+/* Checks and balances */
 const canvas = document.querySelector("canvas");
 
 if (!canvas) {
@@ -21,6 +21,7 @@ context.configure({
   format: canvasFormat,
 });
 
+/* Data to Buffer */
 const triangle = new Float32Array([-0.2, -0.2, 0, 0.2, 0.2, -0.2]);
 const vertexBuffer = device.createBuffer({
   size: triangle.byteLength,
@@ -29,16 +30,6 @@ const vertexBuffer = device.createBuffer({
 });
 device.queue.writeBuffer(vertexBuffer, /*offset*/ 0, triangle);
 
-const vertexBufferLayout: GPUVertexBufferLayout = {
-  arrayStride: Float32Array.BYTES_PER_ELEMENT * 2,
-  attributes: [
-    {
-      format: "float32x2",
-      offset: 0 /*offset*/,
-      shaderLocation: 0 /*shader location*/,
-    },
-  ],
-};
 const vertexShader = device.createShaderModule({
   code: /*wgsl*/ `
   @vertex
@@ -58,22 +49,35 @@ const fragmentShader = device.createShaderModule({
 `,
   label: "Fragment Shader",
 });
+
+const vertexBufferLayout: GPUVertexBufferLayout = {
+  arrayStride: Float32Array.BYTES_PER_ELEMENT * 2,
+  attributes: [
+    {
+      format: "float32x2",
+      offset: 0 /*offset*/,
+      shaderLocation: 0 /*shader location*/,
+    },
+  ],
+};
+const pipeline = device.createRenderPipeline({
+  layout: "auto",
+  vertex: {
+    module: vertexShader,
+    buffers: [vertexBufferLayout],
+    entryPoint: "main",
+  },
+  fragment: {
+    entryPoint: "main",
+    module: fragmentShader,
+    targets: [{ format: canvasFormat }],
+  },
+});
 function render() {
   const commander = device.createCommandEncoder({ label: "cmd encoder" });
-  const pipeline = device.createRenderPipeline({
-    layout: "auto",
-    vertex: {
-      module: vertexShader,
-      buffers: [vertexBufferLayout],
-      entryPoint: "main",
-    },
-    fragment: {
-      entryPoint: "main",
-      module: fragmentShader,
-      targets: [{ format: canvasFormat }],
-    },
-  });
-  const descriptor = commander.beginRenderPass({
+
+  const setUp = commander.beginRenderPass({
+    // config surface
     label: "Color Attachments",
     colorAttachments: [
       {
@@ -85,10 +89,11 @@ function render() {
     ],
   });
 
-  descriptor.setVertexBuffer(/* shaderlocation */ 0, vertexBuffer);
-  descriptor.setPipeline(pipeline);
-  descriptor.draw(triangle.length / 2, 1);
-  descriptor.end();
+  // configure the rest: data, transformations, draw,..
+  setUp.setVertexBuffer(/* shaderlocation */ 0, vertexBuffer);
+  setUp.setPipeline(pipeline);
+  setUp.draw(triangle.length / 2, 1);
+  setUp.end();
   device.queue.submit([commander.finish()]);
 }
 
