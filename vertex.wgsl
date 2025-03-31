@@ -10,6 +10,7 @@ struct VertexOutput {
   @builtin(position) pos: vec4f,
 }
 
+// bind groups are kind of globals for the shader.
 @group(0) @binding(0)
 var<uniform> grid: vec2f;
 @group(0) @binding(1)

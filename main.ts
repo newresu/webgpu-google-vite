@@ -24,32 +24,9 @@ context.configure({
   format: canvasFormat,
 });
 
-/* Vertices: Allocate Space and Write in */
-const vertices = new Float32Array(twoTrianglesCoords);
-const vertexBuffer = getVertexBuffer(device, vertices);
-device.queue.writeBuffer(vertexBuffer, 0, vertices);
+/** ## Pipeline(ShaderModules, VertexLayout) */
 
-/* Uniform: Same. */
-const uniformArray = new Float32Array([GRID_SIZE, GRID_SIZE]);
-const uniformBuffer = getUniformBuffer(device, uniformArray);
-device.queue.writeBuffer(uniformBuffer, 0, uniformArray);
-
-/* Uniform: Same. */
-const cellStateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
-const cellStateBuffer = [
-  getCellStateBuffer(device, cellStateArray, "Cell State A"),
-  getCellStateBuffer(device, cellStateArray, "Cell State B"),
-];
-for (let i = 0; i < cellStateArray.length; i += 3) {
-  cellStateArray[i] = 1;
-}
-device.queue.writeBuffer(cellStateBuffer[0], 0, cellStateArray);
-for (let i = 0; i < cellStateArray.length; i++) {
-  cellStateArray[i] = i % 2;
-}
-device.queue.writeBuffer(cellStateBuffer[1], 0, cellStateArray);
-
-/** Define the layout of data in the buffer */
+/* Declare Vertex-data layout in Buffer. */
 const vertexBufferLayout: GPUVertexBufferLayout = {
   // (x, y) = (f32, f32) = 8 bytes per read
   arrayStride: Float32Array.BYTES_PER_ELEMENT * 2,
@@ -63,7 +40,7 @@ const vertexBufferLayout: GPUVertexBufferLayout = {
   ],
 };
 
-/* Shaders */
+/* SHADERS */
 const vertexShaderModule = device.createShaderModule({
   label: "Vertex Shader",
   code: vertexShader,
@@ -86,11 +63,36 @@ const cellPipeline = device.createRenderPipeline({
     entryPoint: "fragmentMain",
     targets: [
       {
+        // for the first texture/attachment
         format: canvasFormat,
       },
     ],
   },
 });
+
+/** ## Create Buffers and the Binding groups */
+
+const vertices = new Float32Array(twoTrianglesCoords);
+const vertexBuffer = getVertexBuffer(device, vertices);
+device.queue.writeBuffer(vertexBuffer, 0, vertices);
+
+const uniformArray = new Float32Array([GRID_SIZE, GRID_SIZE]);
+const uniformBuffer = getUniformBuffer(device, uniformArray);
+device.queue.writeBuffer(uniformBuffer, 0, uniformArray);
+
+const cellStateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
+const cellStateBuffer = [
+  getCellStateBuffer(device, cellStateArray, "Cell State A"),
+  getCellStateBuffer(device, cellStateArray, "Cell State B"),
+];
+for (let i = 0; i < cellStateArray.length; i += 3) {
+  cellStateArray[i] = 1;
+}
+device.queue.writeBuffer(cellStateBuffer[0], 0, cellStateArray);
+for (let i = 0; i < cellStateArray.length; i++) {
+  cellStateArray[i] = i % 2;
+}
+device.queue.writeBuffer(cellStateBuffer[1], 0, cellStateArray);
 
 const bindGroups = [
   device.createBindGroup({
@@ -123,10 +125,11 @@ const bindGroups = [
   }),
 ];
 
-/* Start the commands */
-function updateGrid() {
+// function uses all globals above.
+function render() {
   step++;
-  const encoder = device.createCommandEncoder();
+  /* ## Start the commands */
+  const encoder = device.createCommandEncoder({ label: "cmd encoder" });
 
   const renderPass = encoder.beginRenderPass({
     colorAttachments: [
@@ -152,4 +155,4 @@ function updateGrid() {
   device.queue.submit([encoder.finish()]);
 }
 
-setInterval(updateGrid, UPDATE_INTERVAL);
+setInterval(render, UPDATE_INTERVAL);

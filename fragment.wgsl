@@ -2,7 +2,7 @@
 fn fragmentMain(@location(0) cell: vec2f) -> @location(0) vec4f {
   /* 
     Invoked for every pixel
-    location(0) is the colorAttachment position.
+    location(0) is the colorAttachment position (1st render target.)
     returns the same color for each pixel.
     */
 
