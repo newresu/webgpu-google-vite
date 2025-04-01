@@ -14,7 +14,15 @@ const adapter = await navigator.gpu.requestAdapter();
 if (!adapter) {
   throw new Error("The GPU isn't being detected, or it is not supported.");
 }
+
 const device = await adapter.requestDevice();
+
+// if this ever fullfills, we log the error
+device.lost.then((info) => {
+  console.log("Logical Device was Lost.");
+  console.log(info);
+});
+
 const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
 context.configure({
   device,
@@ -73,21 +81,26 @@ const pipeline = device.createRenderPipeline({
     targets: [{ format: canvasFormat }],
   },
 });
+
+const rpDescriptor: GPURenderPassDescriptor = {
+  // config surface
+  label: "Color Attachments",
+  colorAttachments: [
+    {
+      loadOp: "clear",
+      storeOp: "store",
+      view: null,
+      clearValue: [0.1, 0.5, 0.6, 1],
+    },
+  ],
+};
 function render() {
   const commander = device.createCommandEncoder({ label: "cmd encoder" });
 
-  const setUp = commander.beginRenderPass({
-    // config surface
-    label: "Color Attachments",
-    colorAttachments: [
-      {
-        loadOp: "clear",
-        storeOp: "store",
-        view: context.getCurrentTexture().createView(),
-        clearValue: [0.1, 0.5, 0.6, 1],
-      },
-    ],
-  });
+  rpDescriptor.colorAttachments[0].view = context
+    .getCurrentTexture()
+    .createView();
+  const setUp = commander.beginRenderPass(rpDescriptor);
 
   // configure the rest: data, transformations, draw,..
   setUp.setVertexBuffer(/* shaderlocation */ 0, vertexBuffer);
@@ -97,6 +110,26 @@ function render() {
   device.queue.submit([commander.finish()]);
 }
 
-render();
+const observer = new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    const element = entry.target;
+    const width = entry.contentBoxSize[0].inlineSize;
+    const height = entry.contentBoxSize[0].blockSize;
+    if (element instanceof HTMLCanvasElement) {
+      element.width = Math.max(
+        1,
+        Math.min(width, device.limits.maxTextureDimension2D)
+      );
+      element.height = Math.max(
+        1,
+        Math.min(height, device.limits.maxTextureDimension2D)
+      );
+    }
+  }
+  // re-render
+  render();
+});
+// render();
+observer.observe(canvas);
 
 export {};

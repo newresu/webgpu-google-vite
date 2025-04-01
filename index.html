@@ -5,14 +5,24 @@
     <title>WebGPU Life</title>
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
     <style>
-      body {
-        background-color: rgba(0,0,1,0.3);
+      * {
+        margin:0;
+        padding:0;
+        box-sizing:"content-box"
+      }
+      html,body{
+        height:100%;
+      }
+      canvas{
+        display:block;
+        height:100%;
+        width:100%;
       }
     </style>
   </head>
   <body>
     <!--300 x 150 by default.-->
-    <canvas width="512" height="512"></canvas>
+    <canvas></canvas>
     <!--"module" allows us top level awaits-->
     <script type="module" src="main.ts"></script>
   </body>
