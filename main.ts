@@ -1,11 +1,3 @@
-/* Checks and balances */
-const canvas = document.querySelector("canvas");
-
-if (!canvas) {
-  throw new Error("Could not find a canvas element.");
-}
-const context = canvas.getContext("webgpu");
-
 if (!navigator.gpu) {
   throw new Error("Browser does not support WebGPU.");
 }
@@ -30,14 +22,13 @@ const module = device.createShaderModule({
     `,
 });
 
-const input = new Float32Array(5e2).map((x, i) => i);
-const input2 = new Float32Array(5e2).map((x, i) => i);
+const input = new Float32Array(2 ** 15).map((x, i) => i);
+const input2 = new Float32Array(2 ** 15).map((x, i) => i);
 const s = performance.now();
 for (let i = 0; i < input.length; i++) {
   input2[i] = input2[i] * 2 + 5;
 }
 const e = performance.now();
-console.log((e - s) / 1000);
 
 const workBuffer = device.createBuffer({
   size: input.byteLength,
@@ -91,15 +82,13 @@ async function mulGPU() {
   // Read the results
   await resultBuffer.mapAsync(GPUMapMode.READ);
   const result = new Float32Array(resultBuffer.getMappedRange());
-
-  // console.log("input", input);
-  // console.log("result", result);
+  console.log(result);
 
   resultBuffer.unmap();
 }
 const s2 = performance.now();
 mulGPU();
 const e2 = performance.now();
-console.log((e2 - s2) / 1000);
+console.log("CPU / GPU (time_ms):", (e - s) / (e2 - s2));
 
 export {};
