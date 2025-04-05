@@ -156,12 +156,13 @@ const encoder = device.createCommandEncoder({
 const computePass = encoder.beginComputePass({
   label: "Compute Pass",
 });
-computePass.setPipeline(pipeline); //pipeline is conceptual, takes the bind-group layout and the compute shader
+computePass.setPipeline(pipeline); // Pipeline is conceptual, takes the bind-group layout and the compute shader
 computePass.setBindGroup(0, computeBindGroup); // group 0
 computePass.dispatchWorkgroups(Math.ceil(BUFFER_SIZE / (4 * 64)));
 computePass.end();
 
 // copies data to staging buffer!
+encoder.copyBufferToBuffer;
 encoder.copyBufferToBuffer(
   outputBuffer, // the place shader writes to
   0,
