@@ -20,7 +20,7 @@ if (!adapter) {
 }
 const device = await adapter.requestDevice();
 device.lost.then((info) => {
-  console.log("device was lost.");
+  console.log("Logical device was lost.");
   console.error(info);
 });
 const ctx = canvas.getContext("webgpu");
