@@ -1,7 +1,7 @@
 const canvas = document.querySelector("canvas");
 
 if (!canvas) {
-  throw new Error("`canvas` is `undefined`.");
+  throw new Error("No HTML Canvas Element found in page.");
 }
 
 if (!navigator.gpu) {
@@ -14,6 +14,9 @@ if (!adapter) {
 }
 
 const device = await adapter.requestDevice();
+device.lost.then((info) => {
+  console.error("Device Lost: ", info);
+});
 
 /* Configure the Canvas */
 const context = canvas.getContext("webgpu"); // where the drawing is rendered.
@@ -79,8 +82,8 @@ const vertexShaderModule = device.createShaderModule({
     @vertex 
     fn vertexMain(@location(0) pos: vec2f)->@builtin(position) vec4f {
       /* - runs for each vertex
-         - location(0) is the shader location
-         - return the coord in clip space 
+         - location(0) is the shader location (a unique ID 0-15)
+         - return the position/coord in clip space 
       */
       if pos.y > 0 {
         return vec4f(pos.x + 0.1, pos.y/2,0,1); 
@@ -97,7 +100,7 @@ const fragmentShaderModule = device.createShaderModule({
     fn fragmentMain() -> @location(0) vec4f {
       /* 
        invoked for every pixel
-       location(0) is the colorAttachment position.
+       location(0) is the colorAttachment position (index in array)
        returns the same color for each pixel.
        */
       return vec4f(1, 0, 0, 1); // (Red, Green, Blue, Alpha)
@@ -111,7 +114,7 @@ const cellPipeline = device.createRenderPipeline({
   vertex: {
     module: vertexShaderModule,
     entryPoint: "vertexMain",
-    buffers: [vertexBufferLayout],
+    buffers: [vertexBufferLayout], // you can have many
   },
   fragment: {
     module: fragmentShaderModule,
@@ -125,8 +128,9 @@ const cellPipeline = device.createRenderPipeline({
 });
 
 renderPass.setPipeline(cellPipeline);
-// `0` below matches the vertex.buffer
+// `0` below matches the index of the vertex.buffers
 renderPass.setVertexBuffer(0, vertexBuffer);
+// could be other vertex buffers with other indices..
 renderPass.draw(vertices.length / 2); // 6 vertices
 
 renderPass.end();
