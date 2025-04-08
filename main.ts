@@ -1,3 +1,5 @@
+const NUM_ELS = 12;
+const BUFFER_SIZE = NUM_ELS * Float32Array.BYTES_PER_ELEMENT;
 if (!navigator.gpu) {
   throw new Error("Browser does not support WebGPU.");
 }
@@ -7,47 +9,61 @@ if (!adapter) {
   throw new Error("The GPU isn't being detected, or it is not supported.");
 }
 const device = await adapter.requestDevice();
+device.lost.then((info) => {
+  console.error(info);
+  throw new Error("Lost GPU Device.");
+});
 
 const module = device.createShaderModule({
-  label: "doubling compute module",
+  label: "Compute Shader",
   code: /* wgsl */ `
       @group(0) @binding(0) var<storage, read_write> data: array<f32>;
- 
-      @compute @workgroup_size(1) fn computeSomething(
-        @builtin(global_invocation_id) id: vec3u
+      @compute @workgroup_size(8) fn main(
+        @builtin(global_invocation_id) gid: vec3u,
+        @builtin(local_invocation_id) lid: vec3u
       ) {
-        let i = id.x;
-        data[i] = data[i] * 2.0 + 5;
+        if(gid.x >= arrayLength(&data)){
+          // it executes extra times.
+          // if dispatchWorkGroups is a large number like 100.
+          data[0] += 1;
+          return;
+        }
+        data[gid.x] = f32(gid.x) * 100. + f32(lid.x);
       }
     `,
 });
 
-const input = new Float32Array(2 ** 15).map((x, i) => i);
-const input2 = new Float32Array(2 ** 15).map((x, i) => i);
-const s = performance.now();
-for (let i = 0; i < input.length; i++) {
-  input2[i] = input2[i] * 2 + 5;
-}
-const e = performance.now();
-
+// This is the Shader's I/O GPUBuffer.
 const workBuffer = device.createBuffer({
-  size: input.byteLength,
-  usage:
-    GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+  size: BUFFER_SIZE,
+  usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
   label: "Work Buffer",
 });
-device.queue.writeBuffer(workBuffer, 0, input);
+// This is the GPUBuffer that the CPU can access (after mapping.)
 const resultBuffer = device.createBuffer({
-  size: input.byteLength,
+  size: BUFFER_SIZE,
   usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+  label: "Staging Buffer",
 });
 
+// or avoid this and use "auto" in `pipeline.layout`
+// In general, this accompanies `createBindGroup`
+const bindGroupLayout = device.createBindGroupLayout({
+  entries: [
+    {
+      binding: 0,
+      buffer: { type: "storage" },
+      visibility: GPUShaderStage.COMPUTE,
+    },
+  ],
+  label: "Bind Group Layout",
+});
 const pipeline = device.createComputePipeline({
-  label: "doubling compute pipeline",
-  layout: "auto",
+  label: "pipeline",
+  layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
   compute: {
     module,
-    entryPoint: "computeSomething",
+    entryPoint: "main",
   },
 });
 
@@ -58,23 +74,23 @@ const binding = device.createBindGroup({
       resource: { buffer: workBuffer },
     },
   ],
-  layout: pipeline.getBindGroupLayout(0), // to group 0 in shader
+  layout: pipeline.getBindGroupLayout(0), // entry's index
   label: "Work Buffer Binding",
 });
 
-async function mulGPU() {
+async function run() {
   const encoder = device.createCommandEncoder({
-    label: "doubling encoder",
+    label: "Encoder",
   });
   const computePass = encoder.beginComputePass({
-    label: "doubling compute pass",
+    label: "Compute Pass",
   });
 
   computePass.setPipeline(pipeline);
   computePass.setBindGroup(0, binding);
-  computePass.dispatchWorkgroups(input.length); // run 3 times
+  computePass.dispatchWorkgroups(Math.ceil(BUFFER_SIZE / 8));
   computePass.end();
-
+  // copy to CPU accessible memory (after mapping)
   encoder.copyBufferToBuffer(workBuffer, 0, resultBuffer, 0, resultBuffer.size);
   const commandBuffer = encoder.finish();
   device.queue.submit([commandBuffer]);
@@ -86,9 +102,5 @@ async function mulGPU() {
 
   resultBuffer.unmap();
 }
-const s2 = performance.now();
-mulGPU();
-const e2 = performance.now();
-console.log("CPU / GPU (time_ms):", (e - s) / (e2 - s2));
-
+run();
 export {};

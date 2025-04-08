@@ -14,8 +14,7 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
-    "@webgpu/types": "^0.1.59",
-    "vite-plugin-glsl": "^1.3.3"
+    "@webgpu/types": "^0.1.59"
   },
   "type": "module"
 }
