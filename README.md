@@ -8,6 +8,11 @@ You may need the [WebGPU Troubleshooting Guide](https://developer.chrome.com/doc
 
 Links to relevant parts of the spec:
 
+- [Compute Shaders](https://gpuweb.github.io/gpuweb/wgsl/#compute-shader-workgroups)
+- [Attributes](https://gpuweb.github.io/gpuweb/wgsl/#attributes)
+
+Such as `@group`, `@binding`, `@builtin`, `@location`, `@vertex`, `@fragment`, `@compute`,...
+
 - [Built-Ins](https://gpuweb.github.io/gpuweb/wgsl/#built-in-values)
 
 Which as a summary says:
