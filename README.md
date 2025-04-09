@@ -25,3 +25,9 @@ Some other common ones are:
 
 - Compute Stage - Input: `@builtin(global_invocation_id)`,`@builtin(local_invocation_id)`, `@builtin(local_invocation_index)`
 - Vertex Stage - Input: `@builtin(instance_index)`, `@builtin(vertex_index)`.
+
+- [Resource](https://gpuweb.github.io/gpuweb/wgsl/#resource-interface)
+
+> A resource is an object which provides access to data external to a shader stage, (...)
+
+Examples: Uniform Buffers, Storage Buffers, ...
