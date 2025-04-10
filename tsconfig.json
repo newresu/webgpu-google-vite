@@ -19,6 +19,6 @@
     "noEmit": true,
   },
   "include": [
-    "*.ts","*.wgsl"
+    "*.ts"
   ]
 }
