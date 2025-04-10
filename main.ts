@@ -75,7 +75,7 @@ const cellPipeline = device.createRenderPipeline({
   label: "Cell Pipeline",
   // layout: "auto" also works.
   layout: device.createPipelineLayout({
-    bindGroupLayouts: [bindGroupLayout ], // I think this index is the "group"
+    bindGroupLayouts: [bindGroupLayout], // I think this index is the "group"
     label: "Pipeline Layout",
   }),
   vertex: {
