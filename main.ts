@@ -12,11 +12,14 @@ const GRID_SIZE = 8;
 const UPDATE_INTERVAL = 1000; // ms
 let step = 0;
 
-/* Get canvas and device (if available otherwise throws.) */
+/* canvas and device */
 const canvas = document.querySelector("canvas");
 const device = await getDevice(navigator);
+device.lost.then((info) => {
+  console.error("DEVICE LOST: ", info);
+});
 
-/* Get the canvas WebGPU-context and configure it */
+/* Configure Canvas GPU Context */
 const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
 const context = getCanvasGPUContext(canvas); //ctx.getContext('webgpu')
 context.configure({
@@ -24,9 +27,19 @@ context.configure({
   format: canvasFormat,
 });
 
-/** ## Pipeline(ShaderModules, VertexLayout) */
+/** ## Pipeline(ShaderModules, VertexLayout, BindLayout) */
 
-/* Declare Vertex-data layout in Buffer. */
+/* SHADERS */
+const vertexShaderModule = device.createShaderModule({
+  label: "Vertex Shader",
+  code: vertexShader,
+});
+const fragmentShaderModule = device.createShaderModule({
+  label: "Fragment Shader",
+  code: fragmentShader,
+});
+
+/* Define the Layouts of all data */
 const vertexBufferLayout: GPUVertexBufferLayout = {
   // (x, y) = (f32, f32) = 8 bytes per read
   arrayStride: Float32Array.BYTES_PER_ELEMENT * 2,
@@ -39,20 +52,32 @@ const vertexBufferLayout: GPUVertexBufferLayout = {
     },
   ],
 };
-
-/* SHADERS */
-const vertexShaderModule = device.createShaderModule({
-  label: "Vertex Shader",
-  code: vertexShader,
-});
-const fragmentShaderModule = device.createShaderModule({
-  label: "Fragment Shader",
-  code: fragmentShader,
+// can be removed when `layout: "auto"` in pipeline.
+const bindGroupLayout = device.createBindGroupLayout({
+  label: "Bind Group Layout",
+  entries: [
+    {
+      binding: 0,
+      visibility: GPUShaderStage.VERTEX,
+      buffer: { type: "uniform" },
+    },
+    {
+      binding: 1,
+      visibility: GPUShaderStage.VERTEX,
+      // critical: read-only, because Vertex Shaders are not
+      // allowed to use read_write storage buffers.
+      buffer: { type: "read-only-storage" },
+    },
+  ],
 });
 
 const cellPipeline = device.createRenderPipeline({
   label: "Cell Pipeline",
-  layout: "auto",
+  // layout: "auto" also works.
+  layout: device.createPipelineLayout({
+    bindGroupLayouts: [bindGroupLayout ], // I think this index is the "group"
+    label: "Pipeline Layout",
+  }),
   vertex: {
     module: vertexShaderModule,
     entryPoint: "vertexMain",
@@ -70,7 +95,7 @@ const cellPipeline = device.createRenderPipeline({
   },
 });
 
-/** ## Create Buffers and the Binding groups */
+/** ## Create and Write Buffers */
 
 const vertices = new Float32Array(twoTrianglesCoords);
 const vertexBuffer = getVertexBuffer(device, vertices);
@@ -81,23 +106,24 @@ const uniformBuffer = getUniformBuffer(device, uniformArray);
 device.queue.writeBuffer(uniformBuffer, 0, uniformArray);
 
 const cellStateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
-const cellStateBuffer = [
+const cellStateBuffers = [
   getCellStateBuffer(device, cellStateArray, "Cell State A"),
   getCellStateBuffer(device, cellStateArray, "Cell State B"),
 ];
 for (let i = 0; i < cellStateArray.length; i += 3) {
   cellStateArray[i] = 1;
 }
-device.queue.writeBuffer(cellStateBuffer[0], 0, cellStateArray);
+device.queue.writeBuffer(cellStateBuffers[0], 0, cellStateArray);
+
 for (let i = 0; i < cellStateArray.length; i++) {
   cellStateArray[i] = i % 2;
 }
-device.queue.writeBuffer(cellStateBuffer[1], 0, cellStateArray);
+device.queue.writeBuffer(cellStateBuffers[1], 0, cellStateArray);
 
 const bindGroups = [
   device.createBindGroup({
     label: "Cell renderer bind group A",
-    layout: cellPipeline.getBindGroupLayout(0), // @group
+    layout: bindGroupLayout,
     entries: [
       {
         binding: 0, //@binding
@@ -105,13 +131,13 @@ const bindGroups = [
       },
       {
         binding: 1, //@binding
-        resource: { buffer: cellStateBuffer[0] },
+        resource: { buffer: cellStateBuffers[0] },
       },
     ],
   }),
   device.createBindGroup({
     label: "Cell renderer bind group B",
-    layout: cellPipeline.getBindGroupLayout(0), // @group
+    layout: bindGroupLayout,
     entries: [
       {
         binding: 0, //@binding
@@ -119,7 +145,7 @@ const bindGroups = [
       },
       {
         binding: 1, //@binding
-        resource: { buffer: cellStateBuffer[1] },
+        resource: { buffer: cellStateBuffers[1] },
       },
     ],
   }),
@@ -147,6 +173,7 @@ function render() {
   // `0` as in VertexBufferLayout.offset
   renderPass.setVertexBuffer(0, vertexBuffer);
 
+  // must match @group **and** the pipeline.layout index.
   renderPass.setBindGroup(0, bindGroups[step % 2]);
 
   renderPass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE); // 6 vertices

@@ -10,11 +10,11 @@ struct VertexOutput {
   @builtin(position) pos: vec4f,
 }
 
-// bind groups are kind of globals for the shader.
+// link the external resources
 @group(0) @binding(0)
 var<uniform> grid: vec2f;
 @group(0) @binding(1)
-var<storage> cellState: array<u32>;
+var<storage, read> cellState: array<u32>;
 @vertex
 fn vertexMain(input: VertexInput) -> VertexOutput {
   /* 

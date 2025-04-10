@@ -1,7 +1,35 @@
 [On the tutorial](https://codelabs.developers.google.com/your-first-webgpu-app) at google they use a plain HTML file.
 
-You can use Live Server, but to get good type-hints I set it up with vite.
+You can use Live Server, but to get good type-hints I set it up with Vite.
 
 Run `npm i && npm run dev` to start.
 
 You may need the [WebGPU Troubleshooting Guide](https://developer.chrome.com/docs/web-platform/webgpu/troubleshooting-tips) to set up the browser.
+
+As a difference to the tutorial, I use the bindGroupLayouts and not `"auto"` for the `pipeline.layout`.
+
+Links to relevant parts of the spec:
+
+- [Compute Shaders](https://gpuweb.github.io/gpuweb/wgsl/#compute-shader-workgroups)
+- [Attributes](https://gpuweb.github.io/gpuweb/wgsl/#attributes)
+
+Such as `@group`, `@binding`, `@builtin`, `@location`, `@vertex`, `@fragment`, `@compute`,...
+
+- [Built-Ins](https://gpuweb.github.io/gpuweb/wgsl/#built-in-values)
+
+Which as a summary says:
+
+1. Built In like `@builtin(position)` can not be duplicated and each belongs to Stage, Direction (Input or Output) and Type (data type.)
+2. They can be on an argument or on a struct, and used as `name: struct_instance`.
+3. Some like `@builtin(position)` belong two combinations of those like Stage: Vertex, Direction:Output **and** Stage: Fragment, Direction:Input. Type is `f32` in both cases.
+
+Some other common ones are:
+
+- Compute Stage - Input: `@builtin(global_invocation_id)`,`@builtin(local_invocation_id)`, `@builtin(local_invocation_index)`
+- Vertex Stage - Input: `@builtin(instance_index)`, `@builtin(vertex_index)`.
+
+- [Resource](https://gpuweb.github.io/gpuweb/wgsl/#resource-interface)
+
+> A resource is an object which provides access to data external to a shader stage, (...)
+
+Examples: Uniform Buffers, Storage Buffers, ...
