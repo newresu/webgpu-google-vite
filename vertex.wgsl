@@ -40,7 +40,7 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
 
   var output: VertexOutput;
   output.pos = vec4f(gridPos, 0, 1);
-  output.cell = cell / grid;
+  output.cell = cell;
 
   return output;
 }

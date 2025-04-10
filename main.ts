@@ -1,5 +1,6 @@
 import vertexShader from "./vertex.wgsl?raw";
 import fragmentShader from "./fragment.wgsl?raw";
+import computeShader from "./compute.wgsl?raw";
 import { twoTrianglesCoords } from "./triangleCoords.ts";
 import { getDevice, getCanvasGPUContext } from "./init.ts";
 import {
@@ -58,26 +59,34 @@ const bindGroupLayout = device.createBindGroupLayout({
   entries: [
     {
       binding: 0,
-      visibility: GPUShaderStage.VERTEX,
+      visibility:
+        GPUShaderStage.FRAGMENT |
+        GPUShaderStage.VERTEX |
+        GPUShaderStage.COMPUTE,
       buffer: { type: "uniform" },
     },
     {
       binding: 1,
-      visibility: GPUShaderStage.VERTEX,
+      visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
       // critical: read-only, because Vertex Shaders are not
       // allowed to use read_write storage buffers.
       buffer: { type: "read-only-storage" },
     },
+    {
+      binding: 2,
+      visibility: GPUShaderStage.COMPUTE,
+      buffer: { type: "storage" },
+    },
   ],
 });
-
+const pipelineLayout = device.createPipelineLayout({
+  bindGroupLayouts: [bindGroupLayout], // I think this index is the "group"
+  label: "Pipeline Layout",
+});
 const cellPipeline = device.createRenderPipeline({
   label: "Cell Pipeline",
   // layout: "auto" also works.
-  layout: device.createPipelineLayout({
-    bindGroupLayouts: [bindGroupLayout], // I think this index is the "group"
-    label: "Pipeline Layout",
-  }),
+  layout: pipelineLayout,
   vertex: {
     module: vertexShaderModule,
     entryPoint: "vertexMain",
@@ -110,11 +119,10 @@ const cellStateBuffers = [
   getCellStateBuffer(device, cellStateArray, "Cell State A"),
   getCellStateBuffer(device, cellStateArray, "Cell State B"),
 ];
-for (let i = 0; i < cellStateArray.length; i += 3) {
-  cellStateArray[i] = 1;
+for (let i = 0; i < cellStateArray.length; ++i) {
+  cellStateArray[i] = Math.random() > 0.6 ? 1 : 0;
 }
 device.queue.writeBuffer(cellStateBuffers[0], 0, cellStateArray);
-
 for (let i = 0; i < cellStateArray.length; i++) {
   cellStateArray[i] = i % 2;
 }
@@ -133,6 +141,10 @@ const bindGroups = [
         binding: 1, //@binding
         resource: { buffer: cellStateBuffers[0] },
       },
+      {
+        binding: 2, //@binding
+        resource: { buffer: cellStateBuffers[1] },
+      },
     ],
   }),
   device.createBindGroup({
@@ -147,16 +159,38 @@ const bindGroups = [
         binding: 1, //@binding
         resource: { buffer: cellStateBuffers[1] },
       },
+      {
+        binding: 2, //@binding
+        resource: { buffer: cellStateBuffers[0] },
+      },
     ],
   }),
 ];
+// Create a compute pipeline that updates the game state.
+const simulationPipeline = device.createComputePipeline({
+  label: "Simulation pipeline",
+  layout: pipelineLayout,
+  compute: {
+    module: device.createShaderModule({
+      label: "Compute Shader",
+      code: computeShader,
+    }),
+    entryPoint: "main",
+  },
+});
 
 // function uses all globals above.
 function render() {
-  step++;
   /* ## Start the commands */
   const encoder = device.createCommandEncoder({ label: "cmd encoder" });
+  const computePass = encoder.beginComputePass();
+  computePass.setPipeline(simulationPipeline);
+  computePass.setBindGroup(0, bindGroups[step % 2]);
+  const workgroupCount = Math.ceil(GRID_SIZE / 8);
+  computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
 
+  computePass.end();
+  step++;
   const renderPass = encoder.beginRenderPass({
     colorAttachments: [
       {
