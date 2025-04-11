@@ -107,8 +107,9 @@ const bindGroupLayout = device.createBindGroupLayout({
 
 const cellPipeline = device.createRenderPipeline({
   label: "Cell Pipeline",
+  // or use `layout: "auto"`
   layout: device.createPipelineLayout({
-    bindGroupLayouts: [bindGroupLayout], // or use "auto"
+    bindGroupLayouts: [bindGroupLayout], // index(0) must match group(0)
   }),
   vertex: {
     module: vertexShaderModule,
