@@ -10,12 +10,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "typescript": "^5.8.2",
-    "vite": "^6.2.4"
+    "typescript": "^5.8.3",
+    "vite": "^6.2.6"
   },
   "devDependencies": {
-    "@webgpu/types": "^0.1.60",
-    "vite-plugin-glsl": "^1.4.0"
+    "@webgpu/types": "^0.1.60"
   },
   "type": "module"
 }
