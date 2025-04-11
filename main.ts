@@ -24,7 +24,7 @@ const computeShaderModule = device.createShaderModule({
     b: vec3f
   }
   @group(0) @binding(0) var<storage, read_write> store: array<MyStruct>;
-  @compute @workgroup_size(1) 
+  @compute @workgroup_size(2) 
   fn main(@builtin(global_invocation_id) id: vec3u){
     if (id.x >= arrayLength(&store)){
       return;
@@ -66,47 +66,46 @@ const cellPipeline = device.createComputePipeline({
 
 /** ## Create and Write Buffers */
 
-const item = new Float32Array(4);
+const item = new Float32Array(100);
 const computeBuffer = device.createBuffer({
   size: item.byteLength,
-  usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+  usage:
+    GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
 });
+device.queue.writeBuffer(computeBuffer, 0, item, 0);
 
 const stagingBuffer = device.createBuffer({
   size: item.byteLength,
-  usage: GPUBufferUsage.COPY_DST,
-  mappedAtCreation: true,
+  usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
 });
 
-const bindGroups = [
-  device.createBindGroup({
-    label: "Cell renderer bind group A",
-    layout: bindGroupLayout,
-    entries: [
-      {
-        binding: 0, //@binding
-        resource: { buffer: computeBuffer },
-      },
-    ],
-  }),
-];
+const bindGroup = device.createBindGroup({
+  label: "Storage Binding",
+  layout: bindGroupLayout,
+  entries: [
+    {
+      binding: 0, //@binding
+      resource: { buffer: computeBuffer },
+    },
+  ],
+});
 
 // function uses all globals above.
-function compute() {
+async function compute() {
   /* ## Start the commands */
   const encoder = device.createCommandEncoder({ label: "cmd encoder" });
-
   const cPass = encoder.beginComputePass({
     label: "Compute Pass",
   });
   cPass.setPipeline(cellPipeline);
-  cPass.setBindGroup(0, bindGroups[0]);
+  cPass.setBindGroup(0, bindGroup);
   cPass.dispatchWorkgroups(1);
   cPass.end();
   encoder.copyBufferToBuffer(computeBuffer, stagingBuffer);
   device.queue.submit([encoder.finish()]);
-  const mapped = stagingBuffer.getMappedRange();
-  console.log(new Float32Array(mapped));
+  await stagingBuffer.mapAsync(GPUMapMode.READ, 0);
+  const range = stagingBuffer.getMappedRange();
+  console.log(new Float32Array(range));
   stagingBuffer.unmap();
 }
 
