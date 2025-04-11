@@ -105,7 +105,8 @@ renderPass.setPipeline(cellPipeline);
 // `0` as in VertexBufferLayout.offset
 renderPass.setVertexBuffer(0, vertexBuffer);
 
-renderPass.setBindGroup(0, bindGroup); // New
+// must be called once for each group.
+renderPass.setBindGroup(0, bindGroup); // @group
 
 renderPass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE); // 6 vertices
 
