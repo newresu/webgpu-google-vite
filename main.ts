@@ -72,6 +72,9 @@ const cellPipeline = device.createRenderPipeline({
   },
 });
 
+// in this case we used `layout:"auto"` in pipeline
+// so we create the bindGroup afterwards and get it
+// from pipeline.
 const bindGroup = device.createBindGroup({
   label: "Cell renderer bind group",
   layout: cellPipeline.getBindGroupLayout(0), // @group
