@@ -1,16 +1,4 @@
-import vertexShader from "./vertex.wgsl?raw";
-import fragmentShader from "./fragment.wgsl?raw";
-import { twoTrianglesCoords } from "./triangleCoords.ts";
 import { getDevice, getCanvasGPUContext } from "./init.ts";
-import {
-  getCellStateBuffer,
-  getUniformBuffer,
-  getVertexBuffer,
-} from "./getBuffers.ts";
-
-const GRID_SIZE = 8;
-const UPDATE_INTERVAL = 1000; // ms
-let step = 0;
 
 /* canvas and device */
 const canvas = document.querySelector("canvas");
@@ -27,98 +15,68 @@ context.configure({
   format: canvasFormat,
 });
 
-/** ## Pipeline(ShaderModules, VertexLayout, BindLayout) */
-
 /* SHADERS */
-const vertexShaderModule = device.createShaderModule({
-  label: "Vertex Shader",
-  code: vertexShader,
-});
-const fragmentShaderModule = device.createShaderModule({
-  label: "Fragment Shader",
-  code: fragmentShader,
+const computeShaderModule = device.createShaderModule({
+  label: "Compute Shader",
+  code: /* wgsl */ `
+  struct MyStruct{
+    a: f32,
+    b: vec3f
+  }
+  @group(0) @binding(0) var<storage, read_write> store: array<MyStruct>;
+  @compute @workgroup_size(1) 
+  fn main(@builtin(global_invocation_id) id: vec3u){
+    if (id.x >= arrayLength(&store)){
+      return;
+    }
+    var item:MyStruct;
+    item.a = 100.;
+    item.b=vec3f(id);
+    store[id.x] = item;
+    return;
+  }
+  `,
 });
 
-/* Define the Layouts of all data */
-const vertexBufferLayout: GPUVertexBufferLayout = {
-  // (x, y) = (f32, f32) = 8 bytes per read
-  arrayStride: Float32Array.BYTES_PER_ELEMENT * 2,
-  attributes: [
-    {
-      // kind x number
-      format: "float32x2",
-      offset: 0,
-      shaderLocation: 0, // Position (in vertex shader below)
-    },
-  ],
-};
-// can be removed when `layout: "auto"` in pipeline.
+/* LAYOUTS */
 const bindGroupLayout = device.createBindGroupLayout({
   label: "Bind Group Layout",
   entries: [
+    // bvb
     {
       binding: 0,
-      visibility: GPUShaderStage.VERTEX,
-      buffer: { type: "uniform" },
-    },
-    {
-      binding: 1,
-      visibility: GPUShaderStage.VERTEX,
-      // critical: read-only, because Vertex Shaders are not
-      // allowed to use read_write storage buffers.
-      buffer: { type: "read-only-storage" },
+      visibility: GPUShaderStage.COMPUTE,
+      buffer: { type: "storage" },
     },
   ],
 });
 
-const cellPipeline = device.createRenderPipeline({
+const cellPipeline = device.createComputePipeline({
   label: "Cell Pipeline",
   // layout: "auto" also works.
   layout: device.createPipelineLayout({
-    bindGroupLayouts: [bindGroupLayout], // I think this index is the "group"
+    bindGroupLayouts: [bindGroupLayout], // index(0) matches @group(0)
     label: "Pipeline Layout",
   }),
-  vertex: {
-    module: vertexShaderModule,
-    entryPoint: "vertexMain",
-    buffers: [vertexBufferLayout], // device doesn't know layout yet.
-  },
-  fragment: {
-    module: fragmentShaderModule,
-    entryPoint: "fragmentMain",
-    targets: [
-      {
-        // for the first texture/attachment
-        format: canvasFormat,
-      },
-    ],
+  compute: {
+    module: computeShaderModule,
+    entryPoint: "main",
   },
 });
 
 /** ## Create and Write Buffers */
 
-const vertices = new Float32Array(twoTrianglesCoords);
-const vertexBuffer = getVertexBuffer(device, vertices);
-device.queue.writeBuffer(vertexBuffer, 0, vertices);
+const item = new Float32Array(4);
+const computeBuffer = device.createBuffer({
+  size: item.byteLength,
+  usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+});
 
-const uniformArray = new Float32Array([GRID_SIZE, GRID_SIZE]);
-const uniformBuffer = getUniformBuffer(device, uniformArray);
-device.queue.writeBuffer(uniformBuffer, 0, uniformArray);
-
-const cellStateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
-const cellStateBuffers = [
-  getCellStateBuffer(device, cellStateArray, "Cell State A"),
-  getCellStateBuffer(device, cellStateArray, "Cell State B"),
-];
-for (let i = 0; i < cellStateArray.length; i += 3) {
-  cellStateArray[i] = 1;
-}
-device.queue.writeBuffer(cellStateBuffers[0], 0, cellStateArray);
-
-for (let i = 0; i < cellStateArray.length; i++) {
-  cellStateArray[i] = i % 2;
-}
-device.queue.writeBuffer(cellStateBuffers[1], 0, cellStateArray);
+const stagingBuffer = device.createBuffer({
+  size: item.byteLength,
+  usage: GPUBufferUsage.COPY_DST,
+  mappedAtCreation: true,
+});
 
 const bindGroups = [
   device.createBindGroup({
@@ -127,59 +85,29 @@ const bindGroups = [
     entries: [
       {
         binding: 0, //@binding
-        resource: { buffer: uniformBuffer },
-      },
-      {
-        binding: 1, //@binding
-        resource: { buffer: cellStateBuffers[0] },
-      },
-    ],
-  }),
-  device.createBindGroup({
-    label: "Cell renderer bind group B",
-    layout: bindGroupLayout,
-    entries: [
-      {
-        binding: 0, //@binding
-        resource: { buffer: uniformBuffer },
-      },
-      {
-        binding: 1, //@binding
-        resource: { buffer: cellStateBuffers[1] },
+        resource: { buffer: computeBuffer },
       },
     ],
   }),
 ];
 
 // function uses all globals above.
-function render() {
-  step++;
+function compute() {
   /* ## Start the commands */
   const encoder = device.createCommandEncoder({ label: "cmd encoder" });
 
-  const renderPass = encoder.beginRenderPass({
-    colorAttachments: [
-      {
-        // first attachment, receives the pixel output
-        view: context.getCurrentTexture().createView(),
-        loadOp: "clear",
-        storeOp: "store",
-        clearValue: [0.1, 0.9, 0, 0.5],
-      },
-    ],
+  const cPass = encoder.beginComputePass({
+    label: "Compute Pass",
   });
-  renderPass.setPipeline(cellPipeline);
-
-  // `0` as in VertexBufferLayout.offset
-  renderPass.setVertexBuffer(0, vertexBuffer);
-
-  // must match @group **and** the pipeline.layout index.
-  renderPass.setBindGroup(0, bindGroups[step % 2]);
-
-  renderPass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE); // 6 vertices
-
-  renderPass.end();
+  cPass.setPipeline(cellPipeline);
+  cPass.setBindGroup(0, bindGroups[0]);
+  cPass.dispatchWorkgroups(1);
+  cPass.end();
+  encoder.copyBufferToBuffer(computeBuffer, stagingBuffer);
   device.queue.submit([encoder.finish()]);
+  const mapped = stagingBuffer.getMappedRange();
+  console.log(new Float32Array(mapped));
+  stagingBuffer.unmap();
 }
 
-setInterval(render, UPDATE_INTERVAL);
+compute();
