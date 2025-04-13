@@ -198,7 +198,7 @@ function render() {
         view: context.getCurrentTexture().createView(),
         loadOp: "clear",
         storeOp: "store",
-        clearValue: [0.1, 0.9, 0, 0.5],
+        clearValue: [0.1, 0.1, 0.1, 0.5],
       },
     ],
   });

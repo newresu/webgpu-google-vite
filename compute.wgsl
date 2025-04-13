@@ -15,20 +15,54 @@ fn cellActive(x: u32, y: u32) -> u32 {
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) cell: vec3u) {
-  // global id starts from (0,0,0), (1,0,0), (n,0,0), (0,1,0),...
-  // (0,0,1)...
-  let activeNeighbors = cellActive(cell.x + 1, cell.y + 1) + cellActive(cell.x + 1, cell.y) + cellActive(cell.x + 1, cell.y - 1) + cellActive(cell.x, cell.y - 1) + cellActive(cell.x - 1, cell.y - 1) + cellActive(cell.x - 1, cell.y) + cellActive(cell.x - 1, cell.y + 1) + cellActive(cell.x, cell.y + 1);
+
+  let grid_x = u32(grid[0]);
+  if (cell.x >= grid_x || cell.y >= grid_x) {
+    return;
+  }
+
+  var activeNeighbors: u32 = 0;
+  if (cell.x % grid_x != 0) {
+    // test left
+
+    activeNeighbors += cellActive(cell.x - 1, cell.y);
+    if (cell.y % grid_x != 0) {
+      // test bottom-left
+      activeNeighbors += cellActive(cell.x - 1, cell.y - 1);
+    }
+    if (cell.y % grid_x != grid_x - 1) {
+      // bottom-right
+      activeNeighbors += cellActive(cell.x - 1, cell.y + 1);
+    }
+  }
+  if (cell.x % grid_x != grid_x - 1) {
+    activeNeighbors += cellActive(cell.x + 1, cell.y);
+    if (cell.y % grid_x != 0) {
+      activeNeighbors += cellActive(cell.x + 1, cell.y - 1);
+    }
+    if (cell.y % grid_x != grid_x - 1) {
+      activeNeighbors += cellActive(cell.x + 1, cell.y + 1);
+    }
+  }
+  // by now it remains top and bottom (2 cells)
+  if (cell.y % grid_x != 0) {
+    // adds left side
+    activeNeighbors += cellActive(cell.x, cell.y - 1);
+  }
+  if (cell.y % grid_x != grid_x - 1) {
+    activeNeighbors += cellActive(cell.x, cell.y + 1);
+  }
 
   let i = cellIndex(cell.xy);
 
   // Conway's game of life rules:
   switch activeNeighbors {
-    case 2 : {
+    case 2u : {
       // Active cells with 2 neighbors stay active.
       cellStateOut[i] = cellStateIn[i];
     }
-    case 3 : {
-      // Cells with 3 neighbors become or stay active.
+    case 3u : {
+      // Cell with 3 neighbors become or stay active.
       cellStateOut[i] = 1;
     }
     default : {
