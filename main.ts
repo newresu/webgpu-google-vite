@@ -9,8 +9,8 @@ import {
   getVertexBuffer,
 } from "./getBuffers.ts";
 
-const GRID_SIZE = 8;
-const UPDATE_INTERVAL = 1000; // ms
+const GRID_SIZE = 64;
+const UPDATE_INTERVAL = 100; // ms
 let step = 0;
 
 /* canvas and device */
@@ -123,10 +123,6 @@ for (let i = 0; i < cellStateArray.length; ++i) {
   cellStateArray[i] = Math.random() > 0.6 ? 1 : 0;
 }
 device.queue.writeBuffer(cellStateBuffers[0], 0, cellStateArray);
-for (let i = 0; i < cellStateArray.length; i++) {
-  cellStateArray[i] = i % 2;
-}
-device.queue.writeBuffer(cellStateBuffers[1], 0, cellStateArray);
 
 const bindGroups = [
   device.createBindGroup({
@@ -183,14 +179,6 @@ const simulationPipeline = device.createComputePipeline({
 function render() {
   /* ## Start the commands */
   const encoder = device.createCommandEncoder({ label: "cmd encoder" });
-  const computePass = encoder.beginComputePass();
-  computePass.setPipeline(simulationPipeline);
-  computePass.setBindGroup(0, bindGroups[step % 2]);
-  const workgroupCount = Math.ceil(GRID_SIZE / 8);
-  computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
-
-  computePass.end();
-  step++;
   const renderPass = encoder.beginRenderPass({
     colorAttachments: [
       {
@@ -203,17 +191,22 @@ function render() {
     ],
   });
   renderPass.setPipeline(cellPipeline);
-
   // `0` as in VertexBufferLayout.offset
   renderPass.setVertexBuffer(0, vertexBuffer);
-
   // must match @group **and** the pipeline.layout index.
   renderPass.setBindGroup(0, bindGroups[step % 2]);
-
   renderPass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE); // 6 vertices
-
   renderPass.end();
+
+  const computePass = encoder.beginComputePass();
+  computePass.setPipeline(simulationPipeline);
+  computePass.setBindGroup(0, bindGroups[step % 2]);
+  const workgroupCount = Math.ceil(GRID_SIZE / 8);
+  computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
+
+  computePass.end();
   device.queue.submit([encoder.finish()]);
+  step++;
 }
 
 setInterval(render, UPDATE_INTERVAL);
