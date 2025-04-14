@@ -14,7 +14,7 @@ const UPDATE_INTERVAL = 100; // ms
 let step = 0;
 
 /* canvas and device */
-const canvas = document.querySelector("canvas");
+const canvas = document.querySelectorAll("canvas");
 const device = await getDevice(navigator);
 device.lost.then((info) => {
   console.error("DEVICE LOST: ", info);
@@ -22,8 +22,13 @@ device.lost.then((info) => {
 
 /* Configure Canvas GPU Context */
 const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
-const context = getCanvasGPUContext(canvas); //ctx.getContext('webgpu')
+const context = getCanvasGPUContext(canvas[0]); //ctx.getContext('webgpu')
 context.configure({
+  device,
+  format: canvasFormat,
+});
+const context_2 = getCanvasGPUContext(canvas[1]); //ctx.getContext('webgpu')
+context_2.configure({
   device,
   format: canvasFormat,
 });
@@ -98,6 +103,10 @@ const cellPipeline = device.createRenderPipeline({
     targets: [
       {
         // for the first texture/attachment
+        format: canvasFormat,
+      },
+      {
+        // for the second texture/attachment
         format: canvasFormat,
       },
     ],
@@ -184,6 +193,13 @@ function render() {
       {
         // first attachment, receives the pixel output
         view: context.getCurrentTexture().createView(),
+        loadOp: "clear",
+        storeOp: "store",
+        clearValue: [0.1, 0.1, 0.1, 0.5],
+      },
+      {
+        // second attachment, receives the pixel output
+        view: context_2.getCurrentTexture().createView(),
         loadOp: "clear",
         storeOp: "store",
         clearValue: [0.1, 0.1, 0.1, 0.5],
