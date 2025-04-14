@@ -185,6 +185,11 @@ const simulationPipeline = device.createComputePipeline({
 });
 
 // function uses all globals above.
+const ops: Omit<GPURenderPassColorAttachment, "view"> = {
+  loadOp: "load",
+  storeOp: "store",
+  clearValue: [0.1, 0.1, 0.1, 0.5],
+};
 function render() {
   /* ## Start the commands */
   const encoder = device.createCommandEncoder({ label: "cmd encoder" });
@@ -193,16 +198,12 @@ function render() {
       {
         // first attachment, receives the pixel output
         view: context.getCurrentTexture().createView(),
-        loadOp: "clear",
-        storeOp: "store",
-        clearValue: [0.1, 0.1, 0.1, 0.5],
+        ...ops,
       },
       {
         // second attachment, receives the pixel output
         view: context_2.getCurrentTexture().createView(),
-        loadOp: "clear",
-        storeOp: "store",
-        clearValue: [0.1, 0.1, 0.1, 0.5],
+        ...ops,
       },
     ],
   });
