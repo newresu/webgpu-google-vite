@@ -10,7 +10,7 @@ import {
 } from "./getBuffers.ts";
 
 const GRID_SIZE = 64;
-const UPDATE_INTERVAL = 100; // ms
+const UPDATE_INTERVAL = 500; // ms
 let step = 0;
 
 /* canvas and device */
@@ -26,6 +26,7 @@ const context = getCanvasGPUContext(canvas[0]); //ctx.getContext('webgpu')
 context.configure({
   device,
   format: canvasFormat,
+  alphaMode: "premultiplied",
 });
 const context_2 = getCanvasGPUContext(canvas[1]); //ctx.getContext('webgpu')
 context_2.configure({
@@ -186,9 +187,9 @@ const simulationPipeline = device.createComputePipeline({
 
 // function uses all globals above.
 const ops: Omit<GPURenderPassColorAttachment, "view"> = {
-  loadOp: "load",
+  loadOp: "clear",
   storeOp: "store",
-  clearValue: [0.1, 0.1, 0.1, 0.5],
+  clearValue: [0.5, 0, 0.3, 0.2],
 };
 function render() {
   /* ## Start the commands */
