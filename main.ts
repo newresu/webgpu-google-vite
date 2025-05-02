@@ -1,3 +1,4 @@
+import matMul from "./matMul.wgsl";
 import { getBuffersAndMatrix } from "./getBuffersAndMatrix";
 import { unmapBuffers } from "./unmapBuffers";
 import { MatrixDimensions } from "./types";
@@ -6,7 +7,7 @@ import { initDevice } from "./initDevice";
 /* Initialisation (quits for dev lost for now)*/
 const device = await initDevice();
 
-// type this to hint for any errors
+// !!!!!!! change the dimensions here !!!!!!
 const matrixDimensions: MatrixDimensions = {
   A: [1024, 1024],
   B: [1024, 1024],
@@ -27,13 +28,17 @@ const [B, bufferShapeB, bufferB] = getBuffersAndMatrix(
 );
 
 unmapBuffers([bufferA, bufferB, bufferShapeA, bufferShapeB]);
+
+const outSize = A.rows * B.columns;
+// can not map at creation bc needs copy first! (GPU access)
 const stagingBuffer = device.createBuffer({
-  size: A.rows * B.columns * Float32Array.BYTES_PER_ELEMENT,
+  size: outSize * Float32Array.BYTES_PER_ELEMENT,
   usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
   label: "Staging Buffer",
 });
+
 const bufferOut = device.createBuffer({
-  size: A.rows * B.columns * Float32Array.BYTES_PER_ELEMENT,
+  size: outSize * Float32Array.BYTES_PER_ELEMENT,
   usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
   label: "Result Matrix",
 });
@@ -72,38 +77,7 @@ const bindGroupLayout = device.createBindGroupLayout({
 });
 const module = device.createShaderModule({
   label: "Compute Shader",
-  code: /* wgsl */ `
-      @group(0) @binding(0) var<storage, read> matrixA: array<f32>;
-      @group(0) @binding(1) var<storage, read> matrixB: array<f32>;
-      @group(0) @binding(2) var<storage, read_write> matrixOut: array<f32>;
-      @group(0) @binding(3) var<uniform> shapeA: vec2u;
-      @group(0) @binding(4) var<uniform> shapeB: vec2u;
-      // 8 work items are seen at a time
-      @compute @workgroup_size(16) fn matMul(
-        @builtin(global_invocation_id) gid: vec3u
-      ) {
-        // each shader should get a C_ij
-
-        let nColsB = shapeB[1];// ==nColsC
-        let nRowsA = shapeA[0];// ==nRowsC
-
-        if(gid.x >= shapeA[0]*shapeB[1]){
-         return;
-        }
-
-        let nColsA = shapeA[1];// ==nRowsB
-        let idxRowC = u32(floor(f32(gid.x)/f32(nColsB))); // i
-        let idxColC = gid.x % nColsB;// j
-        let offsetA = idxRowC*nColsA;// offset to row start
-        let offsetB = idxColC;// offset to column start
-        
-        var acc:f32=0;
-        for (var i:u32=0; i<shapeA[1];i++){
-            acc+=matrixA[offsetA+i]*matrixB[offsetB+i*nColsB];
-          }
-        matrixOut[gid.x] = acc;
-    }
-    `,
+  code: matMul,
 });
 
 const pipeline = device.createComputePipeline({
