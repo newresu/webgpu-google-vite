@@ -10,6 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "ml-matrix": "^6.12.1",
     "typescript": "^5.8.2",
     "vite": "^6.2.3"
   },
