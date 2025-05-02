@@ -1,4 +1,4 @@
-import matMul from "./matMul.wgsl";
+import matMul from "./matMul.wgsl?raw";
 import { getBuffersAndMatrix } from "./getBuffersAndMatrix";
 import { unmapBuffers } from "./unmapBuffers";
 import { MatrixDimensions } from "./types";
